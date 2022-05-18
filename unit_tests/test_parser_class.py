@@ -17,3 +17,8 @@ class TestParserClass(TestCase):
         PAGE_NUMBER = 10
         actual = parser_class._parse_page(PAGE_NUMBER)
         self.assertLess(0, actual.shape[0])
+
+    def test_parse(self):
+        parser_class = JobParser(self.SETTINGS_FILE_NAME)
+        actual = parser_class.parse()
+        pass

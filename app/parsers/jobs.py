@@ -1,19 +1,17 @@
+import json
+import logging
+import pathlib
+import re
+from collections import defaultdict
+from typing import Dict, Union, List
+
+import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-import os
-import sys
-import csv
-import re
-from itertools import zip_longest
-import logging
-import pandas as pd
-import pathlib
-from typing import Dict, Union, List
-import json
-from collections import defaultdict
 
 FIELD_NAMES = ['Job_ID', 'Job_Title', 'Company_Name', 'Price', 'Location', 'Job_Description', 'Country', 'City',
                'Long Job_Description']
+
 REGEXES = {'get_data': r'\sjobmap\[\d+\]=\s(.*);',
            'job_ids': r"""jk:'(.*?)'""",
            'job_title': r"""title:'(.*?)'""",
@@ -21,6 +19,7 @@ REGEXES = {'get_data': r'\sjobmap\[\d+\]=\s(.*);',
            'job_country': r"""country:'(.*?)'""",
            'job_city': r"""city:'(.*?)'""",
            'job_company_name': r"""cmp:'(.*?)'"""}
+
 PROPERTIES_LIST = {'job_id', 'title', 'company_name', 'location', 'country', 'city'}
 
 
@@ -40,16 +39,22 @@ class JobParser:
             return None
 
     def parse(self):
-        data_frames: list = []
-        for page_number in range(0, self.settings['count_page'], 10):
-            data_frames.append(self._parse_page(page_number))
+        data_frames: list = [self._parse_page(page_number)
+                             for page_number in range(0, self.settings['count_page'], 10)]
         return pd.concat(data_frames)
 
     @staticmethod
-    def _get_string_with_re(input_line: str, regex_name: str) -> Union[List, None]:
+    def _get_list_with_re(input_line: str, regex_name: str) -> Union[List, None]:
         if krs := re.findall(REGEXES[regex_name], str(input_line)):
             return krs
         return None
+
+    @classmethod
+    def _get_string_with_re(cls, input_line: str, regex_name: str) -> Union[str, None]:
+        if res := cls._get_list_with_re(input_line, regex_name):
+            return ''.join(res)
+        else:
+            return None
 
     def _parse_page(self, page_num: int):
         self.logger.info(f'Start parsing page {page_num}')
@@ -60,8 +65,8 @@ class JobParser:
         )
         response = requests.get(self.settings['url'], params=params)
         soup = BeautifulSoup(response.content, "html.parser")
-        data_re = self._get_string_with_re(response.text, 'get_data')
-        if data_re:
+
+        if data_re := self._get_list_with_re(response.text, 'get_data'):
             reading_result = defaultdict(list)
             for record in data_re:
                 job_id = self._get_string_with_re(record, 'job_ids')
@@ -71,9 +76,8 @@ class JobParser:
                 for key in (PROPERTIES_LIST - {'job_id'}):
                     reading_result[key].append(self._get_string_with_re(record, f'job_{key}'))
 
-                print(30 * '+')
-                print('Try inner request for long job desc:')
-                print(f'https://ca.indeed.com/viewjob?jk={job_id_param}')
+                self.logger.info('Try inner request for long job desc:')
+                self.logger.info(f'https://ca.indeed.com/viewjob?jk={job_id_param}')
 
                 reading_result['long_description'].\
                     append(self._read_long_description(self._get_long_description_by_id(job_id_param),
