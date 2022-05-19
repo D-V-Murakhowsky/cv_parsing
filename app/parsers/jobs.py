@@ -29,6 +29,11 @@ class JobParser:
         self.settings = self._read_settings(settings_file)
         self.logger = logging.getLogger('main_logger')
 
+    def parse(self):
+        data_frames: list = [self._parse_page(page_number)
+                             for page_number in range(0, self.settings['count_page'], 10)]
+        return pd.concat(data_frames)
+
     @staticmethod
     def _read_settings(file_path: str) -> Union[Dict, None]:
         path = pathlib.Path(__file__).parents[2].resolve() / f'assets/{file_path}'
@@ -37,11 +42,6 @@ class JobParser:
                 return json.loads(file_object.read())
         else:
             return None
-
-    def parse(self):
-        data_frames: list = [self._parse_page(page_number)
-                             for page_number in range(0, self.settings['count_page'], 10)]
-        return pd.concat(data_frames)
 
     @staticmethod
     def _get_list_with_re(input_line: str, regex_name: str) -> Union[List, None]:
@@ -58,26 +58,16 @@ class JobParser:
 
     def _parse_page(self, page_num: int):
         self.logger.info(f'Start parsing page {page_num}')
-        params = (
-            ('q', self.settings["job_title"]),
-            ('l', self.settings["location"]),
-            ('start', str(page_num)),
-        )
-        response = requests.get(self.settings['url'], params=params)
-        soup = BeautifulSoup(response.content, "html.parser")
+
+        response, soup = self._make_request(page_num)
 
         if data_re := self._get_list_with_re(response.text, 'get_data'):
             reading_result = defaultdict(list)
             for record in data_re:
-                job_id = self._get_string_with_re(record, 'job_ids')
-                job_id_param = ''.join(job_id)
-                reading_result['job_id'].append(job_id)
+                job_id, job_id_param = self._get_job_id(record)
 
                 for key in (PROPERTIES_LIST - {'job_id'}):
                     reading_result[key].append(self._get_string_with_re(record, f'job_{key}'))
-
-                self.logger.info('Try inner request for long job desc:')
-                self.logger.info(f'https://ca.indeed.com/viewjob?jk={job_id_param}')
 
                 reading_result['long_description'].\
                     append(self._read_long_description(self._get_long_description_by_id(job_id_param),
@@ -91,6 +81,21 @@ class JobParser:
 
             return pd.DataFrame(reading_result)
 
+    def _get_job_id(self, record):
+        job_id = self._get_string_with_re(record, 'job_ids')
+        job_id_param = ''.join(job_id)
+        return job_id, job_id_param
+
+    def _make_request(self, page_num):
+        params = (
+            ('q', self.settings["job_title"]),
+            ('l', self.settings["location"]),
+            ('start', str(page_num)),
+        )
+        response = requests.get(self.settings['url'], params=params)
+        soup = BeautifulSoup(response.content, "html.parser")
+        return response, soup
+
     @classmethod
     def _get_salaries_list(cls, salaries_soup):
         result = []
@@ -102,9 +107,10 @@ class JobParser:
                 result.append('')
         return result
 
-    @staticmethod
-    def _get_long_description_by_id(job_id_param):
-        long_desc_res = requests.get(f'https://ca.indeed.com/viewjob?jk={job_id_param}')
+    def _get_long_description_by_id(self, job_id_param):
+        self.logger.info('Try inner request for long job desc:')
+        self.logger.info(f'{self.settings["job_details_url"]}={job_id_param}')
+        long_desc_res = requests.get(f'{self.settings["job_details_url"]}={job_id_param}')
         long_desc_soup = BeautifulSoup(long_desc_res.content, "html.parser")
         return long_desc_soup.find('div', id='jobDescriptionText')
 
