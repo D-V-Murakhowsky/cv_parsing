@@ -25,8 +25,8 @@ PROPERTIES_LIST = {'job_id', 'title', 'company_name', 'location', 'country', 'ci
 
 class JobParser:
 
-    def __init__(self, settings_file: str) -> None:
-        self.settings = self._read_settings(settings_file)
+    def __init__(self, settings_path: pathlib.Path) -> None:
+        self.settings = self._read_settings(settings_path)
         self.logger = logging.getLogger('main_logger')
 
     def parse(self):
@@ -35,10 +35,9 @@ class JobParser:
         return pd.concat(data_frames)
 
     @staticmethod
-    def _read_settings(file_path: str) -> Union[Dict, None]:
-        path = pathlib.Path(__file__).parents[2].resolve() / f'assets/{file_path}'
-        if path.is_file():
-            with open(path, 'r') as file_object:
+    def _read_settings(settings_path: pathlib.Path) -> Union[Dict, None]:
+        if settings_path.is_file():
+            with open(settings_path, 'r') as file_object:
                 return json.loads(file_object.read())
         else:
             return None

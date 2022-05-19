@@ -6,10 +6,11 @@ from scrapy.signalmanager import dispatcher
 from scrapy.utils.project import get_project_settings
 import csv  
 
-class CompanyLinksSpider(scrapy.Spider):
-    name = 'companies'
 
-    custom_settings = {
+class CompanyLinksSpider(scrapy.Spider):
+    _NAME = 'companies'
+
+    _CUSTOM_SETTINGS = {
         'DOWNLOAD_DELAY': 3,
         'LOG_LEVEL': 'WARNING'
     }
@@ -83,7 +84,7 @@ class CompaniesSpider(scrapy.Spider):
 
         data = {
             'url': response.url,
-            'name': response.css('[itemprop="name"]::text').get(),
+            '_NAME': response.css('[itemprop="_NAME"]::text').get(),
             'rating': response.css('.css-8l8558 span:nth-child(2)::text').get(),
             'reviews count': response.css('[data-tn-element="reviews-countLink"]::text').get(),
             'founded': response.css('[data-testid="companyInfo-founded"] div:nth-child(2)::text').get(),
@@ -93,52 +94,50 @@ class CompaniesSpider(scrapy.Spider):
             'Salaries': salaries,
         }
 
-        self.scrData.append(data);
+        self.scrData.append(data)
         yield data
 
-def company_url_results():
-    company_urls = []
 
-    def crawler_results(signal, sender, item, response, spider):
-        if not any(elem["url"] == item["url"] for elem in company_urls):
-            company_urls.append(item)
-            with open('c:/tmp/company_urls.json', 'w', encoding='utf-8') as f:
-                json.dump(company_urls, f, ensure_ascii=False, indent=4)
+class CompaniesParser:
 
-    dispatcher.connect(crawler_results, signal=signals.item_scraped)
+    @staticmethod
+    def company_url_results():
+        company_urls = []
 
-    process = CrawlerProcess(get_project_settings())
-    process.crawl(CompanyLinksSpider)
-    process.start()  # the script will block here until the crawling is finished
+        def crawler_results(signal, sender, item, response, spider):
+            if not any(elem["url"] == item["url"] for elem in company_urls):
+                company_urls.append(item)
+                with open('c:/tmp/company_urls.json', 'w', encoding='utf-8') as f:
+                    json.dump(company_urls, f, ensure_ascii=False, indent=4)
 
-    with open('c:/tmp/company_urls.json', 'w', encoding='utf-8') as f:
-        json.dump(company_urls, f, ensure_ascii=False, indent=4)
-    
+        dispatcher.connect(crawler_results, signal=signals.item_scraped)
 
-def company_info_results():
-    results = []
+        process = CrawlerProcess(get_project_settings())
+        process.crawl(CompanyLinksSpider)
+        process.start()  # the script will block here until the crawling is finished
 
-    def crawler_results(signal, sender, item, response, spider):
-        results.append(item)
+        with open('c:/tmp/company_urls.json', 'w', encoding='utf-8') as f:
+            json.dump(company_urls, f, ensure_ascii=False, indent=4)
 
-    dispatcher.connect(crawler_results, signal=signals.item_scraped)
+    @staticmethod
+    def company_info_results():
+        results = []
 
-    process = CrawlerProcess(get_project_settings())
-    process.crawl(CompaniesSpider)
-    process.start()  # the script will block here until the crawling is finished
-    return results
+        def crawler_results(signal, sender, item, response, spider):
+            results.append(item)
 
-if __name__ == '__main__':
+        dispatcher.connect(crawler_results, signal=signals.item_scraped)
 
-    # crawl company URLs and save them to file
-    # company_url_results()
+        process = CrawlerProcess(get_project_settings())
+        process.crawl(CompaniesSpider)
+        process.start()  # the script will block here until the crawling is finished
+        return results
 
-    # crawl company data based on previosly saved URLs
-    comp_infos = company_info_results()
-
-    # write to CSV
-    fieldnames = ['url', 'name', 'rating', 'reviews count', 'founded', 'Company size', 'Revenue', 'Industry', 'Salaries']
-    with open('c:/tmp/companies_data.csv', 'w', encoding='UTF8', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(comp_infos)
+    @staticmethod
+    def dump_to_file(data, file_name):
+        fieldnames = ['url', '_NAME', 'rating', 'reviews count', 'founded', 'Company size', 'Revenue', 'Industry',
+                      'Salaries']
+        with open(file_name, 'w', encoding='UTF8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(data)
